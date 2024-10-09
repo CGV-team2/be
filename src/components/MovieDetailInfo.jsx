@@ -53,7 +53,7 @@ export default function MovieDetailInfo() {
   }
 
   const movieInfo = [
-    { label: "장르", value: movie.genre_ids.join(", ") },
+    { label: "장르", value: Array.isArray(movie.genresInKorean) ? movie.genresInKorean.join(", ") : "장르 정보 없음" },
     {
       label: "기본정보",
       value: [
@@ -63,7 +63,6 @@ export default function MovieDetailInfo() {
     },
     { label: "개봉일", value: movie.release_date },
   ];
-
   return (
     <div className="pretendard w-[996px] min-w-[980px] mx-auto mt-10 font-bold">
       <div className="flex">

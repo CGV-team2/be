@@ -1,3 +1,4 @@
+import axios from "axios";
 import React, { useState, useEffect } from "react";
 import api from "../api/api";
 import { useNavigate } from "react-router-dom";
@@ -50,35 +51,20 @@ export default function SignUp() {
     }
   }, [idValid, pwValid, name, birth]);
 
-  const handleSignUp = async () => {
-    const data = { name: name, user_id: id, password: pw };
-
-    if (name && idValid && pwValid) {
-      try {
-        const response = await api().post("/Member/signup", data, {
-          headers: {
-            "Content-Type": "application/json",
-          },
-        });
-        console.log(response);
-
-        if (response.data) {
-          const token = response.data;
-          localStorage.setItem("token", token);
-
-          navigate("/", { replace: true });
-          window.location.reload();
-        } else {
-          console.log("token 발급 실패");
-          navigate("/", { replace: true });
-        }
-      } catch (error) {
-        alert("회원가입에 실패했습니다.");
-        navigate("/signup", { replace: true });
-        console.error("handleSignUp response error : ", error.response, error);
-      }
+  const handleSubmit = () => {
+    try{
+      const user = axios.post("http://localhost:8080/user/add", {
+        name: name,
+        birthDate: birth,
+        userId: id,
+        password: pw
+      })
+      console.log("OK",user)
     }
-  };
+    catch(error){
+      console.error("안댐")
+    }
+  }
 
   return (
     <>
@@ -137,9 +123,8 @@ export default function SignUp() {
           )}
         </div>
         <button
-          className="bg-[#FB4357] w-full h-12 text-white font-bold rounded-lg mt-8"
+          className="bg-red-400 w-full h-12 text-white font-bold rounded-lg mt-12" onClick={handleSubmit}
           disabled={notAllow}
-          onClick={handleSignUp}
         >
           확인
         </button>

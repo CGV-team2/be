@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
+
 import BookingHeaderButton from "./BookingHeaderButton";
 import TheaterSeating from "./TheaterSeating";
+import axios from "axios";
 
 import { IoMdRefresh } from "react-icons/io";
 import { HiMagnifyingGlassPlus } from "react-icons/hi2";
@@ -12,15 +14,15 @@ import { FaArrowRight } from "react-icons/fa";
 export const IMG_BASE_URL = "https://image.tmdb.org/t/p/w500";
 
 export default function SeatSelection() {
-  const navigate = useNavigate();
   const location = useLocation();
+  const navigate = useNavigate();
   const {
     selectedMovie,
     selectedTheater,
     selectedDate,
     selectedTime,
     selectedHall,
-  } = location.state;
+  } = location.state || {};
 
   const getWeekday = (date) => {
     const weekdays = ["일", "월", "화", "수", "목", "금", "토"];
@@ -33,17 +35,51 @@ export default function SeatSelection() {
     senior: 0,
     child: 0,
   });
+  const [selectedSeats, setSelectedSeats] = useState([]);
+  const [bookedSeats, setBookedSeats] = useState([]); // 예약된 좌석 목록
+  const [isPayment, setIsPayment] = useState(false);
 
   const totalPeople = Object.values(counts).reduce((acc, val) => acc + val, 0);
-  const [selectedSeats, setSelectedSeats] = useState([]);
-  const [isPayment, setIsPayment] = useState(false);
+
+  // 좌석 상태 API 호출
+  useEffect(() => {
+    const fetchSeatStatus = async () => {
+      try {
+        if (!selectedMovie || !selectedTheater || !selectedDate || !selectedTime || !selectedHall) {
+          return;
+        }
+
+        const response = await axios.get(
+          `http://localhost:8080/api/reservation/seat-status`,
+          {
+            params: {
+              movieId: selectedMovie.title, // 영화 제목을 movieId로 사용
+              cinemaName: selectedTheater,
+              screenName: selectedHall,
+              showDate: selectedDate,
+              showTime: selectedTime,
+            },
+          }
+        );
+
+        const seatData = response.data;
+
+        // "1" (예약 완료) 또는 "2" (예약 중)인 좌석을 비활성화
+        const disabledSeats = Object.keys(seatData).filter(
+          (seat) => seatData[seat] === "1" || seatData[seat] === "2"
+        );
+        setBookedSeats(disabledSeats);
+      } catch (error) {
+        console.error("좌석 상태를 불러오지 못했습니다.", error);
+      }
+    };
+
+    fetchSeatStatus();
+  }, [selectedMovie, selectedTheater, selectedDate, selectedTime, selectedHall]);
 
   const handleCountChange = (type, count) => {
     const newCounts = { ...counts, [type]: count };
-    const newTotal = Object.values(newCounts).reduce(
-      (acc, val) => acc + val,
-      0
-    );
+    const newTotal = Object.values(newCounts).reduce((acc, val) => acc + val, 0);
     if (newTotal <= 8) {
       setCounts(newCounts);
       // 선택된 좌석 초기화 (인원 수 변경 시)
@@ -129,6 +165,59 @@ export default function SeatSelection() {
     .map(({ type, count }) => `${type} ${count}명`)
     .join(", ");
 
+  // 결제 선택 버튼 클릭 시 API 호출 및 결제 화면으로 이동
+  const handleReserveAndNavigate = async () => {
+    if (!isPayment) {
+      alert("결제할 좌석과 인원을 선택해주세요.");
+      return;
+    }
+
+    try {
+
+      const token = localStorage.getItem("token"); 
+      if (!token) {
+        alert("로그인이 필요합니다.");
+        navigate("/login");
+        return;
+      }
+
+      const response = await axios.post(
+        "http://localhost:8080/api/reservation/reserve",
+        {
+          movieId: selectedMovie.title,
+          cinemaName: selectedTheater,
+          screenName: selectedHall,
+          showDate: selectedDate,
+          showTime: selectedTime,
+          seatNumbers: selectedSeats, // 선택된 좌석
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`, // JWT 토큰을 Authorization 헤더에 추가
+          },
+        }
+      );
+
+      console.log("예약 성공:", response.data);
+      // 예약이 성공한 경우 결제 페이지로 이동
+      navigate("/ticket/payment", { // 경로 수정
+        state: {
+          selectedMovie,
+          selectedTheater,
+          selectedDate,
+          selectedTime,
+          selectedHall,
+          selectedSeats,
+          counts,
+          totalAmount,
+        },
+      });
+    } catch (error) {
+      console.error("예약 실패:", error);
+      alert("예약 중 오류가 발생했습니다.");
+    }
+  };
+
   useEffect(() => {
     if (
       selectedMovie &&
@@ -149,26 +238,6 @@ export default function SeatSelection() {
     selectedSeats,
   ]);
 
-  const handleNavigatePayment = () => {
-    if (isPayment) {
-      navigate("/ticket/payment", {
-        state: {
-          selectedMovie: {
-            ...selectedMovie,
-            posterUrl: `${IMG_BASE_URL}${selectedMovie.poster_path}`,
-          },
-          selectedTheater,
-          selectedDate,
-          selectedTime,
-          selectedHall,
-          selectedSeats,
-          counts,
-          totalAmount,
-        },
-      });
-    }
-  };
-
   return (
     <>
       <div className="w-[1316px] mx-auto mt-8 select-none flex">
@@ -183,99 +252,79 @@ export default function SeatSelection() {
           <BookingHeaderButton />
 
           <div className="h-[600px] border-t-[3px] border-x-[3px] border-[#D4D3C9] bg-[#F2F0E5]">
-            <>
-              <div className="w-full h-9 bg-[#333333] text-base text-white font-bold flex justify-center items-center flex-shrink-0 relative">
-                <span>인원 / 좌석</span>
-                <span
-                  className="absolute right-4 flex items-center text-sm font-normal cursor-pointer"
-                  onClick={() => {
-                    setCounts({ adult: 0, youth: 0, senior: 0, child: 0 });
-                    setSelectedSeats([]);
-                  }}
-                >
-                  다시하기
-                  <IoMdRefresh size={24} />
-                </span>
+            <div className="w-full h-9 bg-[#333333] text-base text-white font-bold flex justify-center items-center relative">
+              <span>인원 / 좌석</span>
+              <span
+                className="absolute right-4 flex items-center text-sm font-normal cursor-pointer"
+                onClick={() => {
+                  setCounts({ adult: 0, youth: 0, senior: 0, child: 0 });
+                  setSelectedSeats([]);
+                }}
+              >
+                다시하기
+                <IoMdRefresh size={24} />
+              </span>
+            </div>
+
+            <div className="border-b-2 border-[#D4D3C9] flex">
+              <div className="w-[46%] border-r border-[#D4D3C9] mt-4 px-4 text-xs">
+                <p className="text-[#FF0000] text-right">* 최대 8명 선택 가능</p>
+                {renderCountSelector("adult", "일반")}
+                {renderCountSelector("youth", "청소년")}
+                {renderCountSelector("senior", "경로")}
+                {renderCountSelector("child", "우대")}
               </div>
 
-              <div className="border-b-2 border-[#D4D3C9] flex">
-                <div className="w-[46%] border-r border-[#D4D3C9] mt-4 px-4 text-xs">
-                  <p className="text-[#FF0000] text-right">
-                    * 최대 8명 선택 가능
-                  </p>
-
-                  {renderCountSelector("adult", "일반")}
-                  {renderCountSelector("youth", "청소년")}
-                  {renderCountSelector("senior", "경로")}
-
-                  <div className="flex items-center justify-between mb-1.5">
-                    {renderCountSelector("child", "우대")}
-                    <button className="text-xs py-[1px] px-1.5 rounded text-white bg-[#926F60] border border-[#745447]">
-                      관람 할인 안내
-                    </button>
+              <div className="w-[54%] mt-4 px-5 relative">
+                <div className="flex items-center text-xs">
+                  <div>CGV {selectedTheater}</div>
+                  <div className="mx-3 h-4 w-px bg-gray-300"></div>
+                  <div>{selectedHall}</div>
+                  <div className="mx-3 h-4 w-px bg-gray-300"></div>
+                  <div>
+                    남은좌석 <span className="text-[#CA4D10] font-bold">122</span>/123
                   </div>
                 </div>
 
-                <div className="w-[54%] mt-4 px-5 relative">
-                  <div className="flex items-center text-xs">
-                    <div>CGV {selectedTheater}</div>
-                    <div className="mx-3 h-4 w-px bg-gray-300"></div>
-                    <div>{selectedHall}</div>
-                    <div className="mx-3 h-4 w-px bg-gray-300"></div>
-                    <div>
-                      남은좌석{" "}
-                      <span className="text-[#CA4D10] font-bold">122</span>
-                      /123
-                    </div>
-                  </div>
-
-                  <div className="helvetica mt-1.5 font-bold text-[22.8px] text-[#5A5A5A]">
-                    {selectedDate && selectedTime
-                      ? `${selectedDate} (${getWeekday(new Date(selectedDate))}) ${selectedTime} ~ ${endTime}`
-                      : "날짜와 시간을 선택해주세요"}
-                  </div>
-
-                  <button className="absolute bottom-4 right-5 text-xs py-[1px] px-1.5 rounded text-white bg-[#926F60] border border-[#745447]">
-                    상영시간 변경하기
-                  </button>
+                <div className="helvetica mt-1.5 font-bold text-[22.8px] text-[#5A5A5A]">
+                  {selectedDate && selectedTime
+                    ? `${selectedDate} (${getWeekday(new Date(selectedDate))}) ${selectedTime} ~ ${endTime}`
+                    : "날짜와 시간을 선택해주세요"}
                 </div>
               </div>
+            </div>
 
-              <div className="pt-5 flex">
-                <div className="w-[85%] flex flex-col items-center pl-5">
-                  <TheaterSeating
-                    totalPeople={totalPeople}
-                    selectedSeats={selectedSeats}
-                    setSelectedSeats={setSelectedSeats}
-                    bookedSeats={["A1", "B2", "C3", "D4", "E5"]}
-                  />
-                </div>
+            <div className="pt-5 flex">
+              <div className="w-[85%] flex flex-col items-center pl-5">
+                <TheaterSeating
+                  totalPeople={totalPeople}
+                  selectedSeats={selectedSeats}
+                  setSelectedSeats={setSelectedSeats}
+                  bookedSeats={bookedSeats} // 예약된 좌석 전달
+                />
+              </div>
 
-                <div className="w-[15%] text-[#333333]/[.8]">
-                  <button className="helvetica w-[96px] h-[35px] text-[#333333] font-bold text-[13px] rounded border-2 border-[#333333] flex items-center justify-center">
-                    <HiMagnifyingGlassPlus size={22} className="mr-0.5" />
-                    크게보기
-                  </button>
-
-                  <div className="text-xs mt-5 ml-1">
-                    <div className="flex items-center mb-2">
-                      <div className="w-4 h-4 bg-[#D20000] mr-1"></div>
-                      <span>선택</span>
-                    </div>
-
-                    <div className="flex items-center mb-2">
-                      <div className="w-4 h-4 bg-[#BBBBBB] mr-1"></div>
-                      <span>예매완료</span>
-                    </div>
-
-                    <div className="flex items-center">
-                      <div className="w-4 h-4 bg-[#9E705D] mr-1"></div>
-                      <span>선택가능</span>
-                    </div>
-                  </div>
+              {/* 좌석 및 가격 정보 추가 */}
+              <div className="w-[15%] text-[#333333]/[.8]">
+                <div className="text-sm mb-5">
+                  {selectedSeats.length > 0 ? (
+                    <>
+                      <div>
+                        <strong>좌석번호:</strong> {selectedSeats.join(", ")}
+                      </div>
+                      <div>
+                        <strong>총 인원:</strong> {countsDisplay}
+                      </div>
+                      <div>
+                        <strong>총 금액:</strong> {totalAmount.toLocaleString()}원
+                      </div>
+                    </>
+                  ) : (
+                    <p>좌석을 선택해주세요</p>
+                  )}
                 </div>
               </div>
-            </>
+            </div>
           </div>
         </div>
 
@@ -395,8 +444,8 @@ export default function SeatSelection() {
                 ? "border-[#DC3434] bg-[#BF2828] cursor-pointer"
                 : "border-[#979797] bg-[#343433] cursor-not-allowed"
             }`}
-            onClick={handleNavigatePayment}
-            disabled={!isPayment}
+            onClick={handleReserveAndNavigate} // 결제 선택 시 예약 및 결제 페이지로 이동
+            disabled={!isPayment} // disabled 속성을 올바르게 설정
           >
             <FaArrowRight size={41} className="mb-1" />
             결제선택

@@ -28,22 +28,20 @@ const TicketBooking = () => {
     const fetchMovies = async () => {
       const options = {
         method: "GET",
-        url: "https://api.themoviedb.org/3/movie/popular",
-        params: { language: "ko-kr", page: "1" },
-        headers: {
-          accept: "application/json",
-          Authorization:
-            "Bearer eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOiJhMDBmMjRjOTE3NTQ5NzQ3ZDNmYzdhOTRlOTU3YTM3MyIsInNiZiI6MTcyMDY3NTI2OC44NDU0NDMsInN1YiI6IjY2OGYyZjE2NzI3ZTNiZDI3M2Y2YmIyMiIsInNjb3BlcyI6WyJhcGlfcmVhZCJdLCJ2ZXJzaW9uIjoxfQ.OV5n3pRizgsI70At8IHnwduNXCEHSp8ysSQwmJGU9uY",
-        },
+        url: "http://localhost:8080/movies/now_playing",
       };
-
+  
       try {
         const response = await axios.request(options);
-        setMovies(response.data.results);
-
-        if (location.state && location.state.selectedMovie) {
-          setSelectedMovie(location.state.selectedMovie);
-        }
+        console.log(response);
+        
+        // 여기에서 response.data 배열을 정렬
+        const sortedMovies = response.data.sort(
+          (a, b) => b.vote_average - a.vote_average
+        );
+        
+        setMovies(sortedMovies);
+        console.log(sortedMovies);
       } catch (error) {
         console.error("API를 불러오지 못했습니다.", error);
       }

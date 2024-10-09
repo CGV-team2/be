@@ -1,14 +1,40 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import BookingHeaderButton from "./BookingHeaderButton";
 import { IoIosArrowDown } from "react-icons/io";
 import { FaArrowLeft, FaArrowRight, FaCheck } from "react-icons/fa";
+import axios from "axios";
 
 export const IMG_BASE_URL = "https://image.tmdb.org/t/p/w500";
 
 export default function Payment() {
   const navigate = useNavigate();
   const location = useLocation();
+  const [userName, setUserName] = useState('');
+  const [error, setError] = useState(""); // 오류 메시지 상태 관리
+
+
+    //사용자 이름 가져오기
+    useEffect(() => {
+      const fetchUserName = async () => {
+        try {
+          const token = localStorage.getItem("token"); // 로컬스토리지에서 JWT 토큰 가져오기
+  
+          const response = await axios.get("http://localhost:8080/user/name", {
+            headers: {
+              Authorization: `Bearer ${token}`, // JWT 토큰을 Authorization 헤더에 포함
+            },
+          });
+  
+          setUserName(response.data); // 가져온 사용자 이름을 상태에 저장
+        } catch (err) {
+          console.error("사용자 이름을 가져오는 데 실패했습니다.", err);
+          setError("사용자 이름을 불러오는 데 실패했습니다.");
+        }
+      };
+  
+      fetchUserName();
+    }, []); 
 
   // SeatSelection에서 전달된 상태 받기
   const {
@@ -133,7 +159,67 @@ export default function Payment() {
       });
     }
   };
+  
+  //kg 이니시스 모듈 호출
+  const handlePayment = () => {
+    if (!window.IMP) {
+      alert("결제 모듈을 불러오는 데 실패했습니다. 다시 시도해 주세요.");
+      return;
+    }
 
+    const IMP = window.IMP;
+    IMP.init('imp30331400'); 
+  
+    // 아임포트 결제창 호출
+    IMP.request_pay(
+      {
+        pg: 'html5_inicis', // KG이니시스
+        merchant_uid: 'order_' + new Date().getTime(), // 주문 번호
+        name: '영화 결제', // 결제 이름
+        // amount: totalAmount,
+        amount: 100,
+        buyer_name: userName,
+        buyer_tel: '010-1234-5678', // 구매자 전화번호
+      },
+      (rsp) => {
+        if (rsp.success) {
+          // 토큰 가져오기
+          const token = localStorage.getItem("token");
+
+          // 결제 성공 시 reservation/pay API 호출
+          axios
+            .post('http://localhost:8080/api/reservation/pay', {
+              userId: userName, // 토큰에서 사용자 정보 가져오기
+              movieId: selectedMovie.title,
+              cinemaName: selectedTheater,
+              screenName: selectedHall,
+              showDate: selectedDate,
+              showTime: selectedTime,
+              seatNumbers: selectedSeats,
+              paymentRequest: {
+                impUid: rsp.imp_uid, // 아임포트 고유 ID
+                merchantUid: rsp.merchant_uid, // 주문 번호
+              },
+            }, {
+              headers: {
+                Authorization: `Bearer ${token}`, // Authorization 헤더에 토큰 포함
+              }
+            })
+            .then((response) => {
+              // 예약 성공 시 처리
+              alert('결제 및 예약이 완료되었습니다.');
+              navigate('/reservation-confirmation', { state: { reservationData: response.data } });
+            })
+            .catch((error) => {
+              console.error('예약 실패:', error);
+              alert('예약에 실패했습니다.');
+            });
+        } else {
+          alert('결제 실패: ' + rsp.error_msg);
+        }
+      }
+    );
+  };
   // 카테고리별 선택된 인원 수 표시
   const countsDisplay = categoryTotals
     .map(({ type, count }) => `${type} ${count}명`)
@@ -433,6 +519,7 @@ export default function Payment() {
                 : "border-[#979797] bg-[#343433] cursor-not-allowed"
             }`}
             disabled={totalAmount <= 0}
+            onClick={handlePayment} // 결제 버튼에 handlePayment 함수 연결
           >
             <FaCheck size={44} className="mr-3" />
             결제하기

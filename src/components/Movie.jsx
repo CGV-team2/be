@@ -19,55 +19,27 @@ export default function Movie() {
     const fetchMovies = async () => {
       const options = {
         method: "GET",
-        url: "https://api.themoviedb.org/3/movie/popular",
-        params: { language: "ko-kr", page: "1" },
-        headers: {
-          accept: "application/json",
-          Authorization:
-            "Bearer eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOiJhMDBmMjRjOTE3NTQ5NzQ3ZDNmYzdhOTRlOTU3YTM3MyIsIm5iZiI6MTcyMDY3NTI2OC44NDU0NDMsInN1YiI6IjY2OGYyZjE2NzI3ZTNiZDI3M2Y2YmIyMiIsInNjb3BlcyI6WyJhcGlfcmVhZCJdLCJ2ZXJzaW9uIjoxfQ.OV5n3pRizgsI70At8IHnwduNXCEHSp8ysSQwmJGU9uY",
-        },
+        url: "http://localhost:8080/movies/now_playing",
       };
-
+  
       try {
         const response = await axios.request(options);
-        const sortedMovies = response.data.results.sort(
-          (a, b) => b.vote_average - a.vote_average
-        );
-        setMovies(sortedMovies);
-
-        if (location.state && location.state.selectedMovie) {
-          setSelectedMovie(location.state.selectedMovie);
-        }
         console.log(response);
-      } catch (error) {
-        console.error("API를 불러오지 못했습니다.", error);
-      }
-    };
-
-    fetchMovies();
-  }, [location]);
-
-  /*   useEffect(() => {
-    const fetchMovies = async () => {
-      try {
-        const response = await api().get("/update-movies");
-        console.log(response);
+        
+        // 여기에서 response.data 배열을 정렬
         const sortedMovies = response.data.sort(
           (a, b) => b.vote_average - a.vote_average
         );
+        
         setMovies(sortedMovies);
-
-        if (location.state && location.state.selectedMovie) {
-          setSelectedMovie(location.state.selectedMovie);
-        }
         console.log(sortedMovies);
       } catch (error) {
         console.error("API를 불러오지 못했습니다.", error);
       }
     };
-
+  
     fetchMovies();
-  }, [location]); */
+  }, [location]);
 
   //셀렉트 박스 정렬방식
   const sortMovies = (order) => {
